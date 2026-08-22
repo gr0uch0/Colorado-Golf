@@ -1,2 +1,2 @@
 # Colorado-Golf
-gOLFING cOLORADO
+Golfing Colorado
