@@ -1,0 +1,1 @@
+"""ColoradoGolf test package."""
