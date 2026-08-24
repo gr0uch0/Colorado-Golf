@@ -1,11 +1,20 @@
-import { useState } from 'react';
-import { requestPasswordReset } from '../api/client';
+import { useEffect, useState } from 'react';
+import { fetchSetupStatus, requestPasswordReset } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 export function AuthGate() {
-  const { login, setError, error } = useAuth();
+  const { login, completeSetup, setError, error } = useAuth();
   const [mode, setMode] = useState('login');
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [setupForm, setSetupForm] = useState({
+    displayName: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [forgotEmail, setForgotEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -13,6 +22,26 @@ export function AuthGate() {
   const [forgotDevPassword, setForgotDevPassword] = useState('');
 
   const showError = localError || error;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSetupStatus()
+      .then((data) => {
+        if (cancelled) return;
+        const setup = Boolean(data.needsSetup);
+        setNeedsSetup(setup);
+        if (setup) setMode('setup');
+      })
+      .catch(() => {
+        if (!cancelled) setNeedsSetup(false);
+      })
+      .finally(() => {
+        if (!cancelled) setSetupChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const switchToLogin = () => {
     setMode('login');
@@ -45,6 +74,31 @@ export function AuthGate() {
     }
   };
 
+  const handleSetup = async (e) => {
+    e.preventDefault();
+    setLocalError('');
+    setError(null);
+    if (setupForm.password !== setupForm.confirmPassword) {
+      setLocalError('Passwords do not match.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await completeSetup({
+        displayName: setupForm.displayName.trim(),
+        username: setupForm.username.trim(),
+        email: setupForm.email.trim(),
+        password: setupForm.password,
+        isAdmin: true,
+      });
+      setNeedsSetup(false);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleForgot = async (e) => {
     e.preventDefault();
     setLocalError('');
@@ -63,12 +117,106 @@ export function AuthGate() {
     }
   };
 
+  if (!setupChecked) {
+    return (
+      <div className="auth-gate">
+        <div className="auth-gate__card">
+          <h1 className="auth-gate__title">The Colorado Golf Tour</h1>
+          <p className="auth-gate__subtitle">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-gate">
       <div className="auth-gate__card">
         <h1 className="auth-gate__title">The Colorado Golf Tour</h1>
 
-        {mode === 'login' ? (
+        {mode === 'setup' ? (
+          <>
+            <p className="auth-gate__subtitle">
+              No accounts exist on this server yet. Create the first tour admin account
+              to get started.
+            </p>
+
+            {showError && (
+              <p className="auth-gate__error" role="alert">
+                {showError}
+              </p>
+            )}
+
+            <form className="auth-gate__form" onSubmit={handleSetup}>
+              <label className="auth-gate__field">
+                <span>Full name</span>
+                <input
+                  type="text"
+                  required
+                  autoComplete="name"
+                  value={setupForm.displayName}
+                  onChange={(e) =>
+                    setSetupForm((f) => ({ ...f, displayName: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="auth-gate__field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={32}
+                  autoComplete="username"
+                  value={setupForm.username}
+                  onChange={(e) =>
+                    setSetupForm((f) => ({ ...f, username: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="auth-gate__field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={setupForm.email}
+                  onChange={(e) =>
+                    setSetupForm((f) => ({ ...f, email: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="auth-gate__field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={setupForm.password}
+                  onChange={(e) =>
+                    setSetupForm((f) => ({ ...f, password: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="auth-gate__field">
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={setupForm.confirmPassword}
+                  onChange={(e) =>
+                    setSetupForm((f) => ({ ...f, confirmPassword: e.target.value }))
+                  }
+                />
+              </label>
+              <button type="submit" className="auth-gate__submit" disabled={submitting}>
+                {submitting ? 'Creating…' : 'Create admin account'}
+              </button>
+            </form>
+          </>
+        ) : mode === 'login' ? (
           <>
             <p className="auth-gate__subtitle">
               Log in with the email and password provided by your tour admin.
@@ -113,6 +261,19 @@ export function AuthGate() {
             <button type="button" className="auth-gate__link" onClick={switchToForgot}>
               Forgot password?
             </button>
+            {needsSetup && (
+              <button
+                type="button"
+                className="auth-gate__link"
+                onClick={() => {
+                  setMode('setup');
+                  setLocalError('');
+                  setError(null);
+                }}
+              >
+                Create first admin account
+              </button>
+            )}
           </>
         ) : (
           <>

@@ -8,6 +8,7 @@ import {
   loginAccount,
   logoutAccount,
   setAuthSession,
+  setupFirstAdmin,
 } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -56,6 +57,15 @@ export function AuthProvider({ children }) {
     [applySession]
   );
 
+  const completeSetup = useCallback(
+    async (payload) => {
+      const data = await setupFirstAdmin(payload);
+      applySession(data);
+      return data.user;
+    },
+    [applySession]
+  );
+
   const logout = useCallback(async () => {
     await logoutAccount();
     setUser(null);
@@ -83,6 +93,7 @@ export function AuthProvider({ children }) {
       users,
       setUsers,
       login,
+      completeSetup,
       logout,
       changePassword,
       isAuthenticated,
@@ -97,6 +108,7 @@ export function AuthProvider({ children }) {
       user,
       users,
       login,
+      completeSetup,
       logout,
       changePassword,
       isAuthenticated,

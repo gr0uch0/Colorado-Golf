@@ -244,7 +244,32 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def _create_approved_user(body: CreateUserBody) -> dict[str, Any]:
+def _needs_first_admin_setup() -> bool:
+    return count_approved_users() == 0
+
+
+@app.get("/api/auth/setup-status")
+def setup_status() -> dict[str, bool]:
+    return {"needsSetup": _needs_first_admin_setup()}
+
+
+@app.post("/api/auth/setup")
+def setup_first_admin(body: CreateUserBody) -> dict[str, Any]:
+    if not _needs_first_admin_setup():
+        raise HTTPException(
+            status_code=409,
+            detail="Tour already has an account. Log in instead.",
+        )
+    body.isAdmin = True
+    user = _create_approved_user(body, must_change_password=False)
+    return _issue_session(str(user["username"]))
+
+
+def _create_approved_user(
+    body: CreateUserBody,
+    *,
+    must_change_password: bool = True,
+) -> dict[str, Any]:
     try:
         username = validate_username(body.username)
         validate_password(body.password)
@@ -276,6 +301,7 @@ def _create_approved_user(body: CreateUserBody) -> dict[str, Any]:
         hash_password(body.password),
         status="approved",
         is_admin=make_admin,
+        must_change_password=must_change_password,
         handicap=handicap,
     )
     row = get_user_by_username(username)

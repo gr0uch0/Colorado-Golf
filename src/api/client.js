@@ -161,6 +161,22 @@ export async function requestPasswordReset(email) {
   return res.json();
 }
 
+export async function fetchSetupStatus() {
+  const res = await fetch(`${API_BASE}/api/auth/setup-status`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function setupFirstAdmin(payload) {
+  const res = await fetch(`${API_BASE}/api/auth/setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export async function loginAccount(email, password) {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
