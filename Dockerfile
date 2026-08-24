@@ -13,3 +13,5 @@ COPY . .
 # Install your Node.js and Python packages
 RUN npm install
 RUN pip install --no-cache-dir -r server/requirements.txt
+
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
