@@ -75,11 +75,20 @@ set COLORADOGOLF_API_KEY=your-secret
 set VITE_API_KEY=your-secret
 ```
 
+On Railway (or any cloud host), attach persistent storage and point the API at it so redeploys do not wipe SQLite:
+
+```powershell
+# Railway: add a Volume mounted at /data, then set:
+$env:COLORADOGOLF_DATA_DIR = "/data"
+```
+
+Default (local dev): `server/data/coloradogolf.db`
+
 ## Data
 
 | Store | Contents |
 |--------|-----------|
 | `src/data/courses.gpx` | Master course list (OSM) |
-| `server/data/coloradogolf.db` | Per-user played state, field overrides, shared custom courses |
+| `COLORADOGOLF_DATA_DIR/coloradogolf.db` (default `server/data/`) | Per-user played state, field overrides, shared custom courses |
 
 GPX is still bundled with the app; per-user progress lives in the database.

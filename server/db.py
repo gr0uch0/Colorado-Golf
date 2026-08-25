@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,7 +9,9 @@ from typing import Any
 
 from server.handicap import displayed_handicap_index, format_handicap
 
-DB_PATH = Path(__file__).resolve().parent / "data" / "coloradogolf.db"
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = Path(os.environ.get("COLORADOGOLF_DATA_DIR", _DEFAULT_DATA_DIR)).expanduser()
+DB_PATH = DATA_DIR / "coloradogolf.db"
 
 VALID_HOLE_COUNTS = frozenset({9, 18, 27})
 
