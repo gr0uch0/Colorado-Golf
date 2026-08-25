@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   clampHolePar,
   holeLayoutBlocks,
@@ -37,22 +37,26 @@ function nineSummaryColumnLabel(block, blockIndex, totalBlocks) {
   return first === last ? `H${first}` : `${first}–${last}`;
 }
 
-export function HoleParGrid({
-  courseId,
-  holeCount,
-  holePars,
-  holeStrokeIndex,
-  onSave,
-  onSaveStrokeIndex,
-  compact = false,
-  readOnly = false,
-  showNineSummary = false,
-  hideBlockLabels = false,
-  players = [],
-  scoresByPlayer = {},
-  currentUsername,
-  onSavePlayerScores,
-}) {
+export const HoleParGrid = forwardRef(function HoleParGrid(
+  {
+    courseId,
+    holeCount,
+    holePars,
+    holeStrokeIndex,
+    onSave,
+    onSaveStrokeIndex,
+    compact = false,
+    readOnly = false,
+    showNineSummary = false,
+    hideBlockLabels = false,
+    players = [],
+    scoresByPlayer = {},
+    currentUsername,
+    onSavePlayerScores,
+    deferSave = false,
+  },
+  ref,
+) {
   const [values, setValues] = useState(() => holePars ?? []);
   const [strokeIndexValues, setStrokeIndexValues] = useState(() =>
     resolveHoleStrokeIndex(holeCount, holeStrokeIndex)
@@ -152,6 +156,7 @@ export function HoleParGrid({
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : String(err));
       parDirtyRef.current = true;
+      throw err;
     }
   };
 
@@ -165,6 +170,7 @@ export function HoleParGrid({
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : String(err));
       scoresDirtyRef.current = true;
+      throw err;
     }
   };
 
@@ -181,10 +187,12 @@ export function HoleParGrid({
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : String(err));
       strokeIndexDirtyRef.current = true;
+      throw err;
     }
   };
 
   const queueSaveStrokeIndex = (nextValues) => {
+    if (deferSave) return;
     if (strokeIndexTimer.current) clearTimeout(strokeIndexTimer.current);
     strokeIndexTimer.current = setTimeout(() => {
       persistStrokeIndex(nextValues);
@@ -192,6 +200,7 @@ export function HoleParGrid({
   };
 
   const flushSaveStrokeIndex = () => {
+    if (deferSave) return;
     if (strokeIndexTimer.current) {
       clearTimeout(strokeIndexTimer.current);
       strokeIndexTimer.current = null;
@@ -212,6 +221,7 @@ export function HoleParGrid({
   };
 
   const queueSavePars = (nextValues) => {
+    if (deferSave) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       persistPars(nextValues);
@@ -219,6 +229,7 @@ export function HoleParGrid({
   };
 
   const queueSaveScores = (nextScores) => {
+    if (deferSave) return;
     if (scoreTimer.current) clearTimeout(scoreTimer.current);
     scoreTimer.current = setTimeout(() => {
       persistScores(nextScores);
@@ -226,6 +237,7 @@ export function HoleParGrid({
   };
 
   const flushSavePars = () => {
+    if (deferSave) return;
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
@@ -234,6 +246,7 @@ export function HoleParGrid({
   };
 
   const flushSaveScores = () => {
+    if (deferSave) return;
     if (scoreTimer.current) {
       clearTimeout(scoreTimer.current);
       scoreTimer.current = null;
@@ -270,6 +283,70 @@ export function HoleParGrid({
       if (strokeIndexTimer.current) clearTimeout(strokeIndexTimer.current);
     },
     []
+  );
+
+  const discardChanges = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    if (strokeIndexTimer.current) clearTimeout(strokeIndexTimer.current);
+
+    const nextPars = holePars ?? [];
+    const nextStrokeIndex = resolveHoleStrokeIndex(holeCount, holeStrokeIndex);
+    const nextScores = resolveHoleScores(holeCount, scoresByPlayer[currentUsername]);
+
+    valuesRef.current = nextPars;
+    strokeIndexRef.current = nextStrokeIndex;
+    myScoresRef.current = nextScores;
+    setValues(nextPars);
+    setStrokeIndexValues(nextStrokeIndex);
+    setMyScores(nextScores);
+    setLocalError('');
+
+    parDirtyRef.current = false;
+    strokeIndexDirtyRef.current = false;
+    scoresDirtyRef.current = false;
+    remoteParKeyRef.current = parKey(nextPars);
+    remoteStrokeIndexKeyRef.current = strokeIndexKey(nextStrokeIndex);
+    remoteScoresKeyRef.current = scoresKey(nextScores);
+  };
+
+  const saveAll = async () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (scoreTimer.current) clearTimeout(scoreTimer.current);
+    if (strokeIndexTimer.current) clearTimeout(strokeIndexTimer.current);
+
+    const tasks = [];
+    if (
+      parDirtyRef.current &&
+      onSave &&
+      isHoleGridComplete(valuesRef.current)
+    ) {
+      tasks.push(persistPars(valuesRef.current));
+    }
+    if (
+      strokeIndexDirtyRef.current &&
+      onSaveStrokeIndex &&
+      isHoleGridComplete(strokeIndexRef.current)
+    ) {
+      tasks.push(persistStrokeIndex(strokeIndexRef.current));
+    }
+    if (scoresDirtyRef.current && onSavePlayerScores && currentUsername) {
+      tasks.push(persistScores(myScoresRef.current));
+    }
+    if (tasks.length > 0) {
+      await Promise.all(tasks);
+    }
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      saveAll,
+      discardChanges,
+      hasUnsavedChanges: () =>
+        parDirtyRef.current || strokeIndexDirtyRef.current || scoresDirtyRef.current,
+    }),
+    [courseId, holeCount, holePars, holeStrokeIndex, scoresByPlayer, currentUsername]
   );
 
   const rootClass = compact ? 'hole-par hole-par--compact' : 'hole-par';
@@ -588,4 +665,4 @@ export function HoleParGrid({
       )}
     </section>
   );
-}
+});

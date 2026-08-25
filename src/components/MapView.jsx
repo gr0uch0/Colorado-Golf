@@ -12,11 +12,51 @@ import { boundsFromPoints, centerFromPoints } from '../utils/geo';
 const DEFAULT_CENTER = [39.4, -105.5];
 const DEFAULT_ZOOM = 7;
 
-function MapClickForAddPill({ disabled, onPick }) {
+function MapClickForAddPill({ disabled, onPick, onClear }) {
   const map = useMap();
   useEffect(() => {
     if (disabled) return undefined;
+
+    const MOVE_THRESHOLD_PX = 5;
+    let pointerDown = null;
+    let pointerMoved = false;
+    let dragStarted = false;
+    const container = map.getContainer();
+
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return;
+      pointerDown = { x: e.clientX, y: e.clientY };
+      pointerMoved = false;
+      dragStarted = false;
+    };
+
+    const onPointerMove = (e) => {
+      if (!pointerDown) return;
+      const dx = e.clientX - pointerDown.x;
+      const dy = e.clientY - pointerDown.y;
+      if (dx * dx + dy * dy > MOVE_THRESHOLD_PX * MOVE_THRESHOLD_PX) {
+        pointerMoved = true;
+        onClear?.();
+      }
+    };
+
+    const onPointerUp = () => {
+      pointerDown = null;
+    };
+
+    const onDragStart = () => {
+      dragStarted = true;
+      pointerMoved = true;
+      onClear?.();
+    };
+
     const handler = (e) => {
+      if (dragStarted) {
+        dragStarted = false;
+        return;
+      }
+      if (pointerMoved) return;
+
       const pt = map.latLngToContainerPoint(e.latlng);
       onPick({
         lat: e.latlng.lat,
@@ -25,11 +65,23 @@ function MapClickForAddPill({ disabled, onPick }) {
         y: pt.y,
       });
     };
+
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', onPointerUp);
+    map.on('dragstart', onDragStart);
     map.on('click', handler);
+
     return () => {
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('pointercancel', onPointerUp);
+      map.off('dragstart', onDragStart);
       map.off('click', handler);
     };
-  }, [map, onPick, disabled]);
+  }, [map, onPick, onClear, disabled]);
   return null;
 }
 
@@ -142,6 +194,7 @@ export function MapView({
           <MapClickForAddPill
             disabled={mapDisabled}
             onPick={setPill}
+            onClear={() => setPill(null)}
           />
           {courses.map((c) => (
             <Marker

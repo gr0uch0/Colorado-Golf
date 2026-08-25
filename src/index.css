@@ -1417,6 +1417,18 @@ body {
   overflow-x: auto;
 }
 
+.player-scorecard-modal__error {
+  margin: 0 0 0.75rem;
+}
+
+.modal__actions--scorecard {
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  bottom: 0;
+}
+
 .player-scorecard-modal__body .hole-par {
   margin: 0;
   min-width: min(100%, 640px);
